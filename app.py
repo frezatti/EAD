@@ -32,43 +32,44 @@ class ORLFaceRecognizer:
         self.image_size = (112, 92)  # Tamanho padrão ORL
         
     def load_orl_database(self, dataset_path):
-            """
-            Carrega a base de dados ORL
-
-            Args:
-                dataset_path (str): Caminho para a pasta do dataset ORL
-            """
-            print("Carregando base de dados ORL...")
-
-            if not os.path.exists(dataset_path):
-                print("Dataset ORL não encontrado. Criando dados sintéticos para demonstração...")
-                self._create_synthetic_data()
-                return
-
-            self.images = []
-            self.labels = []
-
-            for subject_id in range(1, 41):
-                subject_path = os.path.join(dataset_path, f's{subject_id}')
-                if os.path.exists(subject_path):
-                    for img_id in range(1, 11):
-                        # --- FIX: Define img_path here ---
-                        img_path = os.path.join(subject_path, f'{img_id}.pgm') # Assuming .pgm extension
-                        # --- End FIX ---
-                        if os.path.exists(img_path):
-                            img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
-                            if img is not None:
-                                img_resized = cv2.resize(img, self.image_size)
-                                self.images.append(img_resized.flatten())
-                                self.labels.append(subject_id - 1)  # Labels de 0 a 39
-
-            if len(self.images) == 0:
-                print("Nenhuma imagem foi carregada. Criando dados sintéticos...")
-                self._create_synthetic_data()
-            else:
-                self.images = np.array(self.images)
-                self.labels = np.array(self.labels)
-                print(f"Carregadas {len(self.images)} imagens de {len(np.unique(self.labels))} sujeitos")
+        """
+        Carrega a base de dados ORL
+        
+        Args:
+            dataset_path (str): Caminho para a pasta do dataset ORL
+        """
+        print("Carregando base de dados ORL...")
+        
+        # Se você não tem o dataset ORL, vamos criar dados sintéticos para demonstração
+        if not os.path.exists(dataset_path):
+            print("Dataset ORL não encontrado. Criando dados sintéticos para demonstração...")
+            self._create_synthetic_data()
+            return
+        
+        self.images = []
+        self.labels = []
+        
+        # Carrega imagens reais do dataset ORL
+        for subject_id in range(1, 41):  # 40 sujeitos
+            subject_path = os.path.join(dataset_path, f's{subject_id}')
+            if os.path.exists(subject_path):
+                for img_id in range(1, 11):  # 10 imagens por sujeito
+                    img_path = os.path.join(subject_path, f'{img_id}.pgm')
+                    if os.path.exists(img_path):
+                        # Carrega e processa a imagem
+                        img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+                        if img is not None:
+                            img_resized = cv2.resize(img, self.image_size)
+                            self.images.append(img_resized.flatten())
+                            self.labels.append(subject_id - 1)  # Labels de 0 a 39
+        
+        if len(self.images) == 0:
+            print("Nenhuma imagem foi carregada. Criando dados sintéticos...")
+            self._create_synthetic_data()
+        else:
+            self.images = np.array(self.images)
+            self.labels = np.array(self.labels)
+            print(f"Carregadas {len(self.images)} imagens de {len(np.unique(self.labels))} sujeitos")
     
     def _create_synthetic_data(self):
         """
@@ -80,10 +81,12 @@ class ORLFaceRecognizer:
         self.images = []
         self.labels = []
         
-        for subject_id in range(40):  
+        for subject_id in range(40):  # 40 sujeitos
+            # Cria um "template" base para cada sujeito
             base_face = np.random.randn(self.image_size[0], self.image_size[1]) * 50 + 128
             
-            for img_id in range(10):  
+            for img_id in range(10):  # 10 imagens por sujeito
+                # Adiciona variações ao template base
                 noise = np.random.randn(self.image_size[0], self.image_size[1]) * 20
                 rotation_noise = np.random.randn(self.image_size[0], self.image_size[1]) * 10
                 
@@ -103,8 +106,10 @@ class ORLFaceRecognizer:
         """
         print("Aplicando PCA para redução de dimensionalidade...")
         
+        # Normaliza os dados
         X_scaled = self.scaler.fit_transform(self.images)
         
+        # Aplica PCA
         X_pca = self.pca.fit_transform(X_scaled)
         
         print(f"Dimensionalidade reduzida de {self.images.shape[1]} para {X_pca.shape[1]} componentes")
@@ -119,12 +124,14 @@ class ORLFaceRecognizer:
     def predict_image(self, test_image_path_or_array):
         """
         Classifica uma imagem de teste
+        
         Args:
             test_image_path_or_array: Caminho para imagem ou array numpy
         
         Returns:
             Resultado da classificação
         """
+        # Carrega a imagem de teste
         if isinstance(test_image_path_or_array, str):
             if os.path.exists(test_image_path_or_array):
                 test_img = cv2.imread(test_image_path_or_array, cv2.IMREAD_GRAYSCALE)
@@ -135,13 +142,16 @@ class ORLFaceRecognizer:
         else:
             test_img = test_image_path_or_array
         
+        # Preprocessa a imagem de teste
         test_img_flat = test_img.flatten().reshape(1, -1)
         test_img_scaled = self.scaler.transform(test_img_flat)
         test_img_pca = self.pca.transform(test_img_scaled)
         
+        # Faz a predição
         predicted_class = self.svm.predict(test_img_pca)[0]
         probabilities = self.svm.predict_proba(test_img_pca)[0]
         
+        # Top-5 classes mais prováveis
         top5_indices = np.argsort(probabilities)[-5:][::-1]
         top5_classes = top5_indices
         top5_probs = probabilities[top5_indices]
@@ -158,6 +168,7 @@ class ORLFaceRecognizer:
         """
         Cria uma imagem de teste sintética baseada em um sujeito aleatório
         """
+        # Escolhe um sujeito aleatório
         test_subject = np.random.randint(0, 40)
         subject_images = self.images[self.labels == test_subject]
         
@@ -169,6 +180,7 @@ class ORLFaceRecognizer:
             test_img = np.clip(test_img, 0, 255).astype(np.uint8)
             return test_img
         else:
+            # Cria uma imagem completamente aleatória
             return np.random.randint(0, 256, self.image_size, dtype=np.uint8)
     
     def visualize_results(self, prediction_result):
@@ -178,39 +190,36 @@ class ORLFaceRecognizer:
         fig, axes = plt.subplots(2, 5, figsize=(15, 6))
         fig.suptitle('Resultados do Reconhecimento Facial', fontsize=16)
         
+        # Mostra a imagem de teste
         axes[0, 0].imshow(prediction_result['test_image'], cmap='gray')
         axes[0, 0].set_title(f'Teste\nClasse Prevista: {prediction_result["predicted_class"]}')
         axes[0, 0].axis('off')
         
+        # Mostra 9 imagens da classe prevista
         predicted_class = prediction_result['predicted_class']
         class_images = self.images[self.labels == predicted_class]
         
+        # Posições disponíveis para as imagens (excluindo a primeira posição)
+        positions = [(0, 1), (0, 2), (0, 3), (0, 4), (1, 0), (1, 1), (1, 2), (1, 3), (1, 4)]
+        
         for i in range(min(9, len(class_images))):
-            row = i // 4
-            col = (i % 4) + 1
-            if row == 0:
+            if i < len(positions):
+                row, col = positions[i]
                 axes[row, col].imshow(class_images[i].reshape(self.image_size), cmap='gray')
                 axes[row, col].set_title(f'Classe {predicted_class} - {i+1}')
                 axes[row, col].axis('off')
-            else:
-                if col <= 4:  # Só mostra até 4 na segunda linha
-                    axes[row, col-1].imshow(class_images[i].reshape(self.image_size), cmap='gray')
-                    axes[row, col-1].set_title(f'Classe {predicted_class} - {i+1}')
-                    axes[row, col-1].axis('off')
         
+        # Remove eixos não utilizados
+        used_positions = set([(0, 0)] + positions[:min(9, len(class_images))])
         for i in range(2):
             for j in range(5):
-                if i == 0 and j == 0:
-                    continue
-                if i == 0 and j <= 4:
-                    continue
-                if i == 1 and j <= 3:
-                    continue
-                axes[i, j].axis('off')
+                if (i, j) not in used_positions:
+                    axes[i, j].axis('off')
         
         plt.tight_layout()
         plt.show()
         
+        # Top-5 classes mais prováveis
         print("\n=== TOP-5 CLASSES MAIS PROVÁVEIS ===")
         for i, (class_id, prob) in enumerate(zip(prediction_result['top5_classes'], 
                                                 prediction_result['top5_probabilities'])):
@@ -226,15 +235,19 @@ class ORLFaceRecognizer:
         X_scaled = self.scaler.transform(self.images)
         X_pca = self.pca.transform(X_scaled)
         
+        # Validação cruzada 5-fold
         cv_scores = cross_val_score(self.svm, X_pca, self.labels, cv=5, scoring='accuracy')
         print(f"Acurácia média (5-fold CV): {cv_scores.mean():.4f} ± {cv_scores.std():.4f}")
         print(f"Scores individuais: {cv_scores}")
         
+        # Matriz de confusão com validação cruzada
         y_pred_cv = cross_val_predict(self.svm, X_pca, self.labels, cv=5)
         cm = confusion_matrix(self.labels, y_pred_cv)
         
+        # Visualiza matriz de confusão (simplificada para 20x20 para melhor visualização)
         plt.figure(figsize=(12, 10))
         
+        # Como temos 40 classes, vamos mostrar uma versão resumida
         if len(np.unique(self.labels)) > 20:
             # Agrupa classes para visualização mais limpa
             cm_reduced = self._reduce_confusion_matrix(cm, 20)
@@ -349,23 +362,31 @@ def main():
     print("Base de dados: ORL (Olivetti Research Laboratory)")
     print("Método: PCA + SVM com kernel RBF\n")
     
+    # Inicializa o reconhecedor
     recognizer = ORLFaceRecognizer(n_components=50, kernel='rbf')
     
-    dataset_path = "orl_faces"  
+    # Carrega a base de dados (substitua pelo caminho correto do dataset ORL)
+    dataset_path = "orl_database"  # Ajuste este caminho conforme necessário
     recognizer.load_orl_database(dataset_path)
     
+    # Treina o modelo
     X_pca = recognizer.preprocess_and_train()
     
+    # Testa com uma imagem
     print("\n=== TESTE DE CLASSIFICAÇÃO ===")
-    test_image_path = "test_image.pgm"  
+    test_image_path = "test_image.pgm"  # Ajuste conforme necessário
     prediction_result = recognizer.predict_image(test_image_path)
     
+    # Visualiza os resultados
     recognizer.visualize_results(prediction_result)
     
+    # Análise de validação cruzada
     cv_scores, cm = recognizer.cross_validation_analysis()
     
+    # Visualização t-SNE
     recognizer.tsne_visualization()
     
+    # Análise de erros
     recognizer.analyze_errors(prediction_result)
     
     print("\n=== RESUMO DOS RESULTADOS ===")
